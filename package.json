@@ -1,0 +1,29 @@
+{
+  "name": "omni-tp4",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build",
+    "start": "next start --hostname 127.0.0.1",
+    "check": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts",
+    "calibrate": "tsx --env-file=.env.local scripts/calibrate.ts",
+    "animateur": "node --env-file=.env.local scripts/open-host.mjs",
+    "config:openai": "python3 scripts/configure-openai.py"
+  },
+  "dependencies": {
+    "next": "16.4.3",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "@vercel/blob": "2.8.2",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tsx": "^4.20.0"
+  }
+}
