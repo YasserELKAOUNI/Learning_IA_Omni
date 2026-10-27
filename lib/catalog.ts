@@ -16,10 +16,12 @@ export function getLevel(id: string) { return LEVELS.find(l => l.id === id); }
 
 export type CaseFeedback = { id: string; tier: 'facile'|'intermédiaire'|'piège'; input: string; expected: string; actual: string; outcome: 'correct'|'wrong'|'abstain'; reason: string; hint: string };
 export type RunResult = { id:string; level:LevelId; correct:number; wrong:number; abstained:number; points:number; total:number; length:number; prompt:string; role:string; model:string; createdAt:number; durationMs:number; cases:CaseFeedback[] };
+export type PublicCaseFeedback = Pick<CaseFeedback,'id'|'tier'|'outcome'|'actual'|'reason'|'hint'>;
+export type PublicRunResult = Omit<RunResult,'cases'> & {cases:PublicCaseFeedback[]};
 export type Score = Omit<RunResult,'cases'|'prompt'|'role'>;
 export type Player = { id:string; name:string; joinedAt:number; attempts:number; lastAttemptAt:number; runningUntil:number; best:Partial<Record<LevelId,Score>>; first:Partial<Record<LevelId,Score>>; history:Score[]; bonus:number; vault?:{defense:string; version:string; brokenBy:string[]} };
-export type UploadRecord = {id:string;playerId:string;playerName:string;name:string;size:number;mime:string;createdAt:number;ready:boolean;driveId?:string;driveUrl?:string;driveError?:boolean};
-export type Session = { code:string; title:string; status:'waiting'|'live'|'paused'|'finished'; durationMinutes:number; remainingMs:number; resumedAt:number|null; finaleOpen:boolean; bonusOpen:boolean; freeProgression:boolean; maxCalls:number; usedCalls:number; maxAttempts:number; players:Player[]; createdAt:number;uploads?:UploadRecord[] };
+export type UploadRecord = {id:string;playerId:string;playerName:string;name:string;size:number;mime:string;createdAt:number;ready:boolean;driveId?:string;driveUrl?:string;driveError?:boolean;driveSyncUntil?:number};
+export type Session = { code:string; title:string; status:'waiting'|'live'|'paused'|'finished'; durationMinutes:number; remainingMs:number; resumedAt:number|null; finaleOpen:boolean; bonusOpen:boolean; freeProgression:boolean; maxCalls:number; usedCalls:number; maxAttempts:number; players:Player[]; createdAt:number;uploads?:UploadRecord[];uploadsOpen?:boolean };
 export function timeLeft(s: Pick<Session,'remainingMs'|'resumedAt'|'status'>,now=Date.now()) { return Math.max(0,s.remainingMs-(s.status==='live'&&s.resumedAt?now-s.resumedAt:0)); }
 export function finaleAvailable(s:Session) { return s.finaleOpen || (s.status!=='waiting'&&timeLeft(s)<=15*60_000); }
 export function hasPassed(p:Pick<Player,'best'|'history'>,id:LevelId){const threshold=getLevel(id)?.threshold??99;return (p.best[id]?.correct??0)>=threshold||p.history.some(h=>h.level===id&&h.correct>=threshold);}

@@ -5,6 +5,7 @@ import { type Session, type Player,type LevelId,type Score,type RunResult, timeL
 import { getCases } from './cases';
 import { grade, summarize } from './grader';
 import { complete, messagesFor, pool } from './model';
+import { publicRun } from './run-public';
 
 export class AppError extends Error{constructor(public code:string,public status=400){super(code);}}
 export function configuredCode(){return (process.env.SESSION_CODE||'OMNI27').toUpperCase();}
@@ -21,9 +22,9 @@ function initial():Session{return {code:configuredCode(),title:'Le laboratoire d
 export async function change<R>(code:string,fn:(s:Session)=>R){return mutate<Session,R>(sessionKey(code),initial,fn);}
 export async function getSession(code=configuredCode()){return (await load<Session>(sessionKey(code)))??initial();}
 export function findPlayer(s:Session,id:string){const p=s.players.find(p=>p.id===id);if(!p)throw new AppError('unauthorized',401);return p;}
-export function publicSession(s:Session){return {code:s.code,title:s.title,status:s.status,durationMinutes:s.durationMinutes,remainingMs:timeLeft(s),serverNow:Date.now(),finaleOpen:finaleAvailable(s),bonusOpen:s.bonusOpen,freeProgression:s.freeProgression,leaderboard:ranked(s),participants:s.players.length};}
-export function ownPlayer(p:Player){return {id:p.id,name:p.name,attempts:p.attempts,best:p.best,first:p.first,history:p.history.slice(-30),bonus:p.bonus,hasVault:!!p.vault};}
-export async function join(code:string,name:string){if(code!==configuredCode())throw new AppError('session_unknown',404);if(name.length<2||name.length>30||/[\x00-\x1F<>]/.test(name))throw new AppError('invalid_name');const id=randomUUID();return change(code,s=>{if(s.status==='finished')throw new AppError('finished',409);if(s.players.length>=60)throw new AppError('session_full',409);if(s.players.some(p=>p.name.toLocaleLowerCase('fr')===name.toLocaleLowerCase('fr')))throw new AppError('name_taken',409);const p:Player={id,name,joinedAt:Date.now(),attempts:0,lastAttemptAt:0,runningUntil:0,best:{},first:{},history:[],bonus:0};s.players.push(p);return {id,code};});}
+export function publicSession(s:Session){return {code:s.code,title:s.title,status:s.status,durationMinutes:s.durationMinutes,remainingMs:timeLeft(s),serverNow:Date.now(),finaleOpen:finaleAvailable(s),bonusOpen:s.bonusOpen,freeProgression:s.freeProgression,uploadsOpen:s.uploadsOpen!==false,leaderboard:ranked(s),participants:s.players.length};}
+export function ownPlayer(p:Player){return {id:p.id,name:p.name,attempts:p.attempts,lastAttemptAt:p.lastAttemptAt,best:p.best,first:p.first,history:p.history.slice(-30),bonus:p.bonus,hasVault:!!p.vault};}
+export async function join(code:string,name:string){if(code!==configuredCode())throw new AppError('session_unknown',404);if(name.length<2||name.length>30||/[\x00-\x1F<>]/.test(name))throw new AppError('invalid_name');const id=randomUUID();return change(code,s=>{if(s.players.length>=60)throw new AppError('session_full',409);if(s.players.some(p=>p.name.toLocaleLowerCase('fr')===name.toLocaleLowerCase('fr')))throw new AppError('name_taken',409);const p:Player={id,name,joinedAt:Date.now(),attempts:0,lastAttemptAt:0,runningUntil:0,best:{},first:{},history:[],bonus:0};s.players.push(p);return {id,code};});}
 function canRun(s:Session,p:Player,calls:number){if(s.status!=='live'||timeLeft(s)<=0)throw new AppError('session_not_live',409);if(p.runningUntil>Date.now())throw new AppError('already_running',429);if(Date.now()-p.lastAttemptAt<10_000)throw new AppError('cooldown',429);if(p.attempts>=s.maxAttempts)throw new AppError('attempt_limit',429);if(s.usedCalls+calls>s.maxCalls)throw new AppError('budget_limit',429);}
 export async function evaluate(code:string,id:string,level:LevelId,prompt:string,role=''){
  const def=getLevel(level);if(!def)throw new AppError('invalid_level');const tests=getCases(level),runId=randomUUID();
@@ -35,12 +36,13 @@ export async function evaluate(code:string,id:string,level:LevelId,prompt:string
   await saveRun(code,id,run);
   const {cases:_cases,prompt:_prompt,role:_role,...score}=run;
   await change(code,s=>{const p=findPlayer(s,id);p.runningUntil=0;if(!p.first[level])p.first[level]=score;const best=p.best[level];if(!best||score.points>best.points||(score.points===best.points&&(score.correct>best.correct||(score.correct===best.correct&&score.length<best.length))))p.best[level]=score;p.history.push(score);});
-  return run;
+  return publicRun(run);
  }catch(e){await change(code,s=>{const p=findPlayer(s,id);p.runningUntil=0;p.attempts=Math.max(0,p.attempts-1);}).catch(()=>{});throw e;}
 }
 import { saveNew } from './store';
 async function saveRun(code:string,id:string,run:RunResult){await saveNew(`workshop/runs/${code}/${id}/${run.id}.json`,run);}
-export async function readRun(code:string,id:string,runId:string){if(!/^[a-f0-9-]{36}$/.test(runId))throw new AppError('invalid_run');const run=await load<RunResult>(`workshop/runs/${code}/${id}/${runId}.json`);if(!run)throw new AppError('not_found',404);return run;}
+export async function readFullRun(code:string,id:string,runId:string){if(!/^[a-f0-9-]{36}$/.test(runId))throw new AppError('invalid_run');const run=await load<RunResult>(`workshop/runs/${code}/${id}/${runId}.json`);if(!run)throw new AppError('not_found',404);return run;}
+export async function readRun(code:string,id:string,runId:string){return publicRun(await readFullRun(code,id,runId));}
 export function vaultSecret(code:string,id:string){return `OMNI-${sign(`fictional-vault:${code}:${id}`).slice(0,12)}`;}
 export async function attackVault(code:string,id:string,targetId:string,prompt:string){
  const target=await change(code,s=>{if(!s.bonusOpen)throw new AppError('bonus_closed',403);if(targetId===id)throw new AppError('own_vault');const p=findPlayer(s,id),t=findPlayer(s,targetId);if(!t.vault)throw new AppError('no_vault');if(t.vault.brokenBy.includes(id))throw new AppError('already_broken',409);canRun(s,p,1);s.usedCalls++;p.attempts++;p.lastAttemptAt=Date.now();p.runningUntil=Date.now()+40_000;return {defense:t.vault.defense,version:t.vault.version};});
