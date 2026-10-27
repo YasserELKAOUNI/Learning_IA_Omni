@@ -8,7 +8,7 @@ Dossier de réception créé et relu avec le connecteur : [OMNI TP4 — dépôts
 
 1. Ouvrir [Google Apps Script](https://script.google.com/home/start) avec le compte propriétaire du dossier et créer un projet « OMNI — canal documents ».
 2. Remplacer le fichier `Code.gs` par [le récepteur du dépôt](../integrations/google-drive/Code.gs). Dans **Paramètres du projet**, activer l’affichage du manifeste, puis remplacer `appsscript.json` par [le manifeste fourni](../integrations/google-drive/appsscript.json).
-3. Dans **Paramètres du projet → Propriétés du script**, ajouter `OMNI_FOLDER_ID` avec la valeur `1IZoMG1p3tViN8dIFjH5OyvYvfzpTo9sZ` et `OMNI_RECEIVER_SECRET` avec un secret aléatoire d’au moins 32 caractères. Ce secret doit être identique à `DRIVE_RECEIVER_SECRET` côté Vercel. Ne jamais le mettre dans `Code.gs`, le navigateur participant, Git ou le chat.
+3. Dans **Paramètres du projet → Propriétés du script**, ajouter `OMNI_FOLDER_ID` avec la valeur `1IZoMG1p3tViN8dIFjH5OyvYvfzpTo9sZ`. Préparer ensuite le secret avec la phase 1 ci-dessous : le propriétaire le colle lui-même dans `OMNI_RECEIVER_SECRET` et enregistre les propriétés. Ce secret doit être identique à `DRIVE_RECEIVER_SECRET` côté Vercel. Ne jamais le mettre dans `Code.gs`, le navigateur participant, Git ou le chat.
 4. Choisir **Déployer → Nouveau déploiement → Application Web**, **Exécuter en tant que moi**, et accès **Tout le monde**. L’accès anonyme est nécessaire pour l’appel serveur à serveur ; le récepteur refuse chaque dépôt sans le secret. Si l’organisation interdit ce mode, ce canal doit rester désactivé jusqu’à une intégration Google approuvée par son administrateur.
 5. **À ce point, le propriétaire doit examiner et accepter lui-même l’autorisation Google.** Le scope `DriveApp` demandé est un accès Drive large au niveau Google ; la restriction au dossier est imposée par le code du récepteur. Il ne faut pas présenter cette restriction comme une permission OAuth limitée à un dossier. L’autorisation n’est pas demandée aux participants.
 6. Copier l’URL de déploiement se terminant par `/exec`, puis saisir les variables serveur dans la procédure terminal décrite ci-dessous. Redéployer l’application Vercel.
@@ -17,14 +17,22 @@ Un avertissement de sécurité du navigateur ou un écran de consentement Google
 
 ## Saisie des variables serveur
 
-À la racine du projet, lancer la procédure interactive :
+**Phase 1 — préparer le secret avant l’autorisation et le déploiement Google.** Le propriétaire exécute lui-même dans Terminal :
 
 ```bash
 cd /Users/elkaouniyasser/omni-tp4
+python3 integrations/google-drive/configure.py --prepare-secret
+```
+
+La commande génère un secret aléatoire s’il n’existe pas encore, ou réutilise le secret local existant. Elle enregistre `DRIVE_RECEIVER_SECRET` dans `.env.local` atomiquement avec permissions `0600`, puis le copie dans le presse-papiers macOS via l’entrée standard de `pbcopy`. Elle n’affiche jamais sa valeur et ne la passe pas en argument de commande. Le propriétaire revient dans les propriétés du script Google, crée `OMNI_RECEIVER_SECRET`, fait **Cmd+V** dans sa valeur et clique sur **Enregistrer les propriétés**. Il effectue lui-même cette saisie ; aucun secret ne doit être envoyé dans le chat.
+
+**Phase 2 — enregistrer l’URL après le déploiement Google.** Une fois l’autorisation Google accordée par le propriétaire et l’URL `/exec` disponible :
+
+```bash
 python3 integrations/google-drive/configure.py
 ```
 
-Elle demande l’URL `/exec`, puis le même secret que celui saisi dans les propriétés du script, avec saisie masquée. Elle met à jour `.env.local` atomiquement avec permissions `0600`, sans afficher de secret et sans changer les autres variables. Choisir le secret aléatoire dans un gestionnaire de mots de passe puis le saisir dans les deux emplacements ; il n’est jamais nécessaire de l’envoyer dans le chat.
+La procédure demande seulement l’URL `/exec` et réutilise le secret préparé, sans nouvelle saisie du secret. Si aucun secret n’a été préparé, elle conserve une saisie masquée du secret déjà enregistré dans Google. Elle met à jour `.env.local` atomiquement avec permissions `0600`, sans afficher de secret et sans changer les autres variables.
 
 Les noms enregistrés sont `GOOGLE_DRIVE_FOLDER_ID`, `GOOGLE_DRIVE_FOLDER_URL`, `DRIVE_RECEIVER_URL` et `DRIVE_RECEIVER_SECRET`. Aucun n’est préfixé `NEXT_PUBLIC_` : l’URL du récepteur et son secret restent côté serveur.
 
